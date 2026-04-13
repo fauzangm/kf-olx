@@ -1,3 +1,141 @@
+<?php
+// Include configuration file
+require_once 'config.php';
+
+// Check if user is logged in
+if (!$user->isLoggedIn()) {
+    header('Location: login.php');
+    exit();
+}
+
+// Get all categories
+$categories = $category->getAllCategories();
+
+// Initialize variables
+$error = '';
+$success = '';
+$formData = [
+    'category' => '',
+    'title' => '',
+    'description' => '',
+    'condition' => '',
+    'price' => '',
+    'location' => '',
+    'contactName' => '',
+    'contactPhone' => '',
+    'nego' => ''
+];
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Sanitize and extract form data
+    $formData = [
+        'category' => trim($_POST['category'] ?? ''),
+        'title' => trim($_POST['title'] ?? ''),
+        'description' => trim($_POST['description'] ?? ''),
+        'condition' => trim($_POST['condition'] ?? ''),
+        'price' => trim($_POST['price'] ?? ''),
+        'location' => trim($_POST['location'] ?? ''),
+        'contactName' => trim($_POST['contactName'] ?? ''),
+        'contactPhone' => trim($_POST['contactPhone'] ?? ''),
+        'nego' => isset($_POST['nego'])
+    ];
+    
+    // Validation
+    if (empty($formData['category'])) {
+        $error = 'Silakan pilih kategori';
+    } elseif (empty($formData['title'])) {
+        $error = 'Judul iklan wajib diisi';
+    } elseif (strlen($formData['title']) < 10) {
+        $error = 'Judul iklan minimal 10 karakter';
+    } elseif (strlen($formData['title']) > 150) {
+        $error = 'Judul iklan maksimal 150 karakter';
+    } elseif (empty($formData['description'])) {
+        $error = 'Deskripsi iklan wajib diisi';
+    } elseif (strlen($formData['description']) < 20) {
+        $error = 'Deskripsi iklan minimal 20 karakter';
+    } elseif (empty($formData['condition'])) {
+        $error = 'Silakan pilih kondisi barang';
+    } elseif (empty($formData['price']) || !is_numeric($formData['price']) || $formData['price'] <= 0) {
+        $error = 'Harga harus berupa angka yang valid';
+    } elseif (empty($formData['location'])) {
+        $error = 'Lokasi wajib diisi';
+    } elseif (empty($formData['contactName'])) {
+        $error = 'Nama kontak wajib diisi';
+    } elseif (strlen($formData['contactName']) < 3) {
+        $error = 'Nama kontak minimal 3 karakter';
+    } elseif (empty($formData['contactPhone'])) {
+        $error = 'No. HP/WhatsApp wajib diisi';
+    } else {
+        // Handle image upload
+        $uploadedImages = [];
+        if (isset($_FILES['images']) && !empty($_FILES['images']['name'][0])) {
+            $files = $_FILES['images'];
+            $fileCount = count($files['name']);
+            
+            for ($i = 0; $i < $fileCount; $i++) {
+                if ($files['error'][$i] === UPLOAD_ERR_OK) {
+                    $fileName = $files['name'][$i];
+                    $fileTmpName = $files['tmp_name'][$i];
+                    $fileSize = $files['size'][$i];
+                    $fileError = $files['error'][$i];
+                    
+                    // Validate file
+                    $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+                    $maxSize = 5 * 1024 * 1024; // 5MB
+                    
+                    if (!in_array($files['type'][$i], $allowedTypes)) {
+                        $error = 'Hanya file gambar (JPG, PNG, GIF) yang diperbolehkan';
+                        break;
+                    }
+                    
+                    if ($fileSize > $maxSize) {
+                        $error = 'Ukuran file maksimal 5MB';
+                        break;
+                    }
+                    
+                    // Generate unique filename
+                    $fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
+                    $newFileName = 'ad_' . time() . '_' . uniqid() . '.' . $fileExtension;
+                    $uploadPath = UPLOAD_PATH . $newFileName;
+                    
+                    // Move file to upload directory
+                    if (move_uploaded_file($fileTmpName, $uploadPath)) {
+                        $uploadedImages[] = $newFileName;
+                    } else {
+                        $error = 'Gagal mengupload gambar';
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (empty($error)) {
+            // Create ad in database
+            $userId = $_SESSION['user_id'];
+            $categoryId = $formData['category'];
+            $title = $formData['title'];
+            $description = $formData['description'];
+            $price = floatval($formData['price']);
+            $location = $formData['location'];
+            
+            $adId = $ad->createAd($userId, $categoryId, $title, $description, $price, $location);
+            
+            if ($adId) {
+                // Upload images to database
+                foreach ($uploadedImages as $imagePath) {
+                    $adImage->addImage($adId, $imagePath);
+                }
+                
+                $success = 'Iklan berhasil dipublikasikan! Mengalihkan...';
+                header('Refresh: 2; URL=index.php');
+            } else {
+                $error = 'Terjadi kesalahan saat menyimpan iklan. Silakan coba lagi.';
+            }
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -200,6 +338,11 @@
             font-size: 14px;
             color: #666;
         }
+        .alert-custom {
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -265,60 +408,33 @@
 
                 <!-- Post Ad Form -->
                 <div class="post-ad-card">
-                    <form id="postAdForm">
+                    <!-- Error/Success Messages -->
+                    <?php if (!empty($error)): ?>
+                        <div class="alert alert-danger alert-custom">
+                            <i class="fas fa-exclamation-circle me-2"></i><?php echo htmlspecialchars($error); ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if (!empty($success)): ?>
+                        <div class="alert alert-success alert-custom">
+                            <i class="fas fa-check-circle me-2"></i><?php echo htmlspecialchars($success); ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <form method="POST" action="" enctype="multipart/form-data">
                         <!-- Step 1: Category Selection -->
                         <div id="step1Content" class="step-content">
                             <h3 class="mb-4">Pilih Kategori</h3>
                             
                             <div class="category-grid">
-                                <div class="category-item" data-category="mobil">
-                                    <div class="category-icon">
-                                        <i class="fas fa-car"></i>
+                                <?php foreach ($categories as $cat): ?>
+                                    <div class="category-item" data-category="<?php echo $cat['id']; ?>">
+                                        <div class="category-icon">
+                                            <i class="<?php echo $cat['icon'] ?? 'fas fa-tag'; ?>"></i>
+                                        </div>
+                                        <h6><?php echo htmlspecialchars($cat['name']); ?></h6>
                                     </div>
-                                    <h6>Mobil</h6>
-                                </div>
-                                <div class="category-item" data-category="motor">
-                                    <div class="category-icon">
-                                        <i class="fas fa-motorcycle"></i>
-                                    </div>
-                                    <h6>Motor</h6>
-                                </div>
-                                <div class="category-item" data-category="hp-tablet">
-                                    <div class="category-icon">
-                                        <i class="fas fa-mobile-alt"></i>
-                                    </div>
-                                    <h6>HP & Tablet</h6>
-                                </div>
-                                <div class="category-item" data-category="elektronik">
-                                    <div class="category-icon">
-                                        <i class="fas fa-laptop"></i>
-                                    </div>
-                                    <h6>Elektronik</h6>
-                                </div>
-                                <div class="category-item" data-category="fashion">
-                                    <div class="category-icon">
-                                        <i class="fas fa-tshirt"></i>
-                                    </div>
-                                    <h6>Fashion</h6>
-                                </div>
-                                <div class="category-item" data-category="properti">
-                                    <div class="category-icon">
-                                        <i class="fas fa-home"></i>
-                                    </div>
-                                    <h6>Properti</h6>
-                                </div>
-                                <div class="category-item" data-category="hobi">
-                                    <div class="category-icon">
-                                        <i class="fas fa-gamepad"></i>
-                                    </div>
-                                    <h6>Hobi & Olahraga</h6>
-                                </div>
-                                <div class="category-item" data-category="jasa">
-                                    <div class="category-icon">
-                                        <i class="fas fa-briefcase"></i>
-                                    </div>
-                                    <h6>Jasa</h6>
-                                </div>
+                                <?php endforeach; ?>
                             </div>
 
                             <div class="text-end mt-4">
@@ -334,29 +450,33 @@
                             
                             <!-- Title -->
                             <div class="mb-3">
-                                <label for="adTitle" class="form-label">Judul Iklan *</label>
-                                <input type="text" class="form-control" id="adTitle" placeholder="Contoh: iPhone 13 Pro Max 256GB" maxlength="100" required>
+                                <label for="title" class="form-label">Judul Iklan *</label>
+                                <input type="text" class="form-control" id="title" name="title" 
+                                       placeholder="Contoh: iPhone 13 Pro Max 256GB" maxlength="150" 
+                                       value="<?php echo htmlspecialchars($formData['title']); ?>" required>
                                 <div class="character-count">
-                                    <span id="titleCount">0</span>/100 karakter
+                                    <span id="titleCount"><?php echo strlen($formData['title']); ?></span>/150 karakter
                                 </div>
                             </div>
 
                             <!-- Description -->
                             <div class="mb-3">
-                                <label for="adDescription" class="form-label">Deskripsi *</label>
-                                <textarea class="form-control" id="adDescription" rows="5" placeholder="Jelaskan kondisi barang, kelengkapan, alasan jual, dll..." maxlength="1000" required></textarea>
+                                <label for="description" class="form-label">Deskripsi *</label>
+                                <textarea class="form-control" id="description" name="description" rows="5" 
+                                          placeholder="Jelaskan kondisi barang, kelengkapan, alasan jual, dll..." maxlength="1000" 
+                                          required><?php echo htmlspecialchars($formData['description']); ?></textarea>
                                 <div class="character-count">
-                                    <span id="descCount">0</span>/1000 karakter
+                                    <span id="descCount"><?php echo strlen($formData['description']); ?></span>/1000 karakter
                                 </div>
                             </div>
 
                             <!-- Condition -->
                             <div class="mb-3">
                                 <label for="condition" class="form-label">Kondisi *</label>
-                                <select class="form-select" id="condition" required>
+                                <select class="form-select" id="condition" name="condition" required>
                                     <option value="">Pilih kondisi</option>
-                                    <option value="baru">Baru</option>
-                                    <option value="bekas">Bekas</option>
+                                    <option value="baru" <?php echo $formData['condition'] === 'baru' ? 'selected' : ''; ?>>Baru</option>
+                                    <option value="bekas" <?php echo $formData['condition'] === 'bekas' ? 'selected' : ''; ?>>Bekas</option>
                                 </select>
                             </div>
 
@@ -366,11 +486,13 @@
                                 <div class="price-input-group">
                                     <div class="input-group">
                                         <span class="input-group-text">Rp</span>
-                                        <input type="number" class="form-control" id="price" placeholder="0" min="0" required>
+                                        <input type="number" class="form-control" id="price" name="price" 
+                                               placeholder="0" min="0" step="0.01" 
+                                               value="<?php echo htmlspecialchars($formData['price']); ?>" required>
                                     </div>
                                 </div>
                                 <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" id="nego">
+                                    <input class="form-check-input" type="checkbox" id="nego" name="nego" <?php echo $formData['nego'] ? 'checked' : ''; ?>>
                                     <label class="form-check-label" for="nego">
                                         Bisa nego
                                     </label>
@@ -380,18 +502,24 @@
                             <!-- Location -->
                             <div class="mb-3">
                                 <label for="location" class="form-label">Lokasi *</label>
-                                <input type="text" class="form-control" id="location" placeholder="Contoh: Jakarta Selatan, DKI Jakarta" required>
+                                <input type="text" class="form-control" id="location" name="location" 
+                                       placeholder="Contoh: Jakarta Selatan, DKI Jakarta" 
+                                       value="<?php echo htmlspecialchars($formData['location']); ?>" required>
                             </div>
 
                             <!-- Contact Info -->
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label for="contactName" class="form-label">Nama Kontak *</label>
-                                    <input type="text" class="form-control" id="contactName" placeholder="Nama Anda" required>
+                                    <input type="text" class="form-control" id="contactName" name="contactName" 
+                                           placeholder="Nama Anda" 
+                                           value="<?php echo htmlspecialchars($formData['contactName']); ?>" required>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label for="contactPhone" class="form-label">No. HP/WhatsApp *</label>
-                                    <input type="tel" class="form-control" id="contactPhone" placeholder="0812-3456-7890" required>
+                                    <input type="tel" class="form-control" id="contactPhone" name="contactPhone" 
+                                           placeholder="0812-3456-7890" 
+                                           value="<?php echo htmlspecialchars($formData['contactPhone']); ?>" required>
                                 </div>
                             </div>
 
@@ -414,7 +542,7 @@
                                 <h5>Drag & drop foto di sini</h5>
                                 <p class="text-muted">atau klik untuk memilih file</p>
                                 <p class="text-muted small">Maksimal 8 foto, format JPG/PNG, maks 5MB per foto</p>
-                                <input type="file" id="imageInput" multiple accept="image/*" style="display: none;">
+                                <input type="file" id="imageInput" name="images[]" multiple accept="image/*" style="display: none;">
                             </div>
 
                             <div id="imagePreview" class="row g-2 mt-3"></div>

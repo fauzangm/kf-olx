@@ -1,0 +1,30 @@
+-- Insert data untuk tabel categories KF OLX
+-- Copy dan jalankan query ini di phpMyAdmin
+ 
+INSERT INTO categories (name, icon) VALUES
+('Mobil', 'fas fa-car'),
+('Motor', 'fas fa-motorcycle'),
+('HP & Tablet', 'fas fa-mobile-alt'),
+('Elektronik', 'fas fa-laptop'),
+('Fashion', 'fas fa-tshirt'),
+('Properti', 'fas fa-home'),
+('Hobi & Olahraga', 'fas fa-gamepad'),
+('Jasa', 'fas fa-briefcase'),
+('Kamera', 'fas fa-camera'),
+('Musik & Film', 'fas fa-music'),
+('Bayi & Anak', 'fas fa-baby'),
+('Kesehatan & Kecantikan', 'fas fa-heartbeat'),
+('Rumah Tangga', 'fas fa-home'),
+('Kantor & Industri', 'fas fa-building'),
+('Hewan Peliharaan', 'fas fa-paw'),
+('Alat Transportasi Lain', 'fas fa-truck'),
+('Gadget & Aksesoris', 'fas fa-headphones'),
+('Komputer & Aksesoris', 'fas fa-desktop'),
+('Buku, Majalah & Komik', 'fas fa-book'),
+('Voucher & Layanan', 'fas fa-ticket-alt'),
+('Olahraga', 'fas fa-football-ball'),
+('Mainan & Hobi', 'fas fa-puzzle-piece'),
+('Makanan & Minuman', 'fas fa-utensils'),
+('Tanaman', 'fas fa-leaf'),
+('Tour & Travel', 'fas fa-plane'),
+('Lain-lain', 'fas fa-tag');
